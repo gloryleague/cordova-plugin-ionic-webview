@@ -7,6 +7,9 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 
+import com.microsoft.cordova.CodePushPackageManager;
+import com.microsoft.cordova.CodePushPreferences;
+
 import org.apache.cordova.ConfigXmlParser;
 import org.apache.cordova.CordovaInterface;
 import org.apache.cordova.CordovaPreferences;
@@ -19,6 +22,9 @@ import org.apache.cordova.PluginManager;
 import org.apache.cordova.engine.SystemWebViewClient;
 import org.apache.cordova.engine.SystemWebViewEngine;
 import org.apache.cordova.engine.SystemWebView;
+
+import java.io.File;
+import java.net.MalformedURLException;
 
 public class IonicWebViewEngine extends SystemWebViewEngine {
   public static final String TAG = "IonicWebViewEngine";
@@ -63,7 +69,7 @@ public class IonicWebViewEngine extends SystemWebViewEngine {
     localServer = new WebViewLocalServer(cordova.getActivity(), "localhost:" + port, true, parser);
     WebViewLocalServer.AssetHostingDetails ahd = localServer.hostAssets("www");
 
-    webView.setWebViewClient(new ServerClient(this, parser));
+    webView.setWebViewClient(new ServerClient(this, parser, cordova));
 
     super.init(parentWebView, cordova, client, resourceApi, pluginManager, nativeToJsMessageQueue);
   }
@@ -71,10 +77,12 @@ public class IonicWebViewEngine extends SystemWebViewEngine {
   private class ServerClient extends SystemWebViewClient
   {
     private ConfigXmlParser parser;
+    private CordovaInterface cordova;
 
-    public ServerClient(SystemWebViewEngine parentEngine, ConfigXmlParser parser) {
+    public ServerClient(SystemWebViewEngine parentEngine, ConfigXmlParser parser, CordovaInterface cordova) {
       super(parentEngine);
       this.parser = parser;
+      this.cordova = cordova;
     }
 
     @Override
@@ -87,7 +95,21 @@ public class IonicWebViewEngine extends SystemWebViewEngine {
       super.onPageStarted(view, url, favicon);
       if (url.equals(parser.getLaunchUrl())) {
         view.stopLoading();
-        view.loadUrl(CDV_LOCAL_SERVER);
+
+        try {
+          CodePushPreferences codePushPreferences = new CodePushPreferences(cordova.getActivity());
+          CodePushPackageManager codePushPackageManager = new CodePushPackageManager(cordova.getActivity(), codePushPreferences);
+          String packageLocation = codePushPackageManager.getCurrentPackageMetadata().localPath;
+          File startPage = new File(this.cordova.getActivity().getFilesDir() + packageLocation, "www/index.html");
+          String finalUrl = startPage.toURI().toURL().toString();
+
+          this.parentEngine.loadUrl(finalUrl, false);
+        } catch (MalformedURLException e) {
+          e.printStackTrace();
+        } catch (Exception e) {
+          e.printStackTrace();
+          webView.loadUrl(CDV_LOCAL_SERVER);
+        }
       }
     }
 
